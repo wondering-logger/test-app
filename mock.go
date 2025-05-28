@@ -1,53 +1,49 @@
-package mocks
+// TestGetServerlessAppReport_ComponentRepoError tests when the component repo returns an error
+func TestGetServerlessAppReport_ComponentRepoError(t *testing.T) {
+	// Create mock instances
+	mockComponentRepo := new(mocks.MockComponentDocRepo)
+	mockDeploymentRepo := new(mocks.MockDeploymentDocRepo)
 
-import (
-	"context"
-	"serverless_platform/internal/serverless_controller/registry/database"
+	// Create the report manager
+	rm := NewReportManager(mockComponentRepo, mockDeploymentRepo)
 
-	"github.com/stretchr/testify/mock"
-)
+	testDeploymentID := "test-deployment-123"
+	testComponentName := "test-component"
 
-// MockComponentDocRepo is a mock implementation of ComponentDocRepo
-type MockComponentDocRepo struct {
-	mock.Mock
-}
-
-// Get mocks the Get method of ComponentDocRepo
-func (m *MockComponentDocRepo) Get(ctx context.Context, componentName string) (*database.ComponentDto, error) {
-	args := m.Called(ctx, componentName)
-
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	// Create a test deployment DTO
+	testDeployment := &database.DeploymentDto{
+		ID:            testDeploymentID,
+		ComponentName: testComponentName,
+		DeploymentEnvironment: database.DeploymentEnvironmentDto{
+			Environment:    enums.EnvironmentDv,
+			SubEnvironment: sharedtypes.SubEnvironment("test-subenv"),
+			Region:         enums.RegionEast,
+			Cloud:          enums.CloudProviderAzure,
+		},
+		Namespace:   "test-namespace",
+		ClusterName: "test-cluster",
+		NetworkZone: enums.NetworkZoneTrusted,
 	}
 
-	return args.Get(0).(*database.ComponentDto), args.Error(1)
-}
+	expectedError := errors.New("component repository error")
 
-// Create mocks the Create method of ComponentDocRepo
-func (m *MockComponentDocRepo) Create(ctx context.Context, dto *database.ComponentDto) error {
-	args := m.Called(ctx, dto)
-	return args.Error(0)
-}
+	// Set up mocks
+	// First call succeeds
+	mockDeploymentRepo.On("Get", mock.Anything, testDeploymentID).Return(testDeployment, nil)
+	// Second call fails
+	mockComponentRepo.On("Get", mock.Anything, testComponentName).Return(nil, expectedError)
 
-// Update mocks the Update method of ComponentDocRepo
-func (m *MockComponentDocRepo) Update(ctx context.Context, dto *database.ComponentDto) error {
-	args := m.Called(ctx, dto)
-	return args.Error(0)
-}
+	// Call the method
+	ctx := context.Background()
+	report, err := rm.GetServerlessAppReport(ctx, testDeploymentID)
 
-// List mocks the List method of ComponentDocRepo
-func (m *MockComponentDocRepo) List(ctx context.Context) ([]*database.ComponentDto, error) {
-	args := m.Called(ctx)
+	// Assert the results
+	assert.Error(t, err, "Expected error when component repo fails")
+	assert.Nil(t, report, "Expected report to be nil")
+	assert.Contains(t, err.Error(), "error retrieving component")
+	assert.Contains(t, err.Error(), "component repository error")
 
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-
-	return args.Get(0).([]*database.ComponentDto), args.Error(1)
-}
-
-// Delete mocks the Delete method of ComponentDocRepo
-func (m *MockComponentDocRepo) Delete(ctx context.Context, componentName string) error {
-	args := m.Called(ctx, componentName)
-	return args.Error(0)
+	// Verify mocks
+	mockDeploymentRepo.AssertExpectations(t)
+	mockComponentRepo.AssertExpectations(t)
 }
